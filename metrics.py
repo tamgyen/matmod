@@ -1,7 +1,10 @@
 import abc
 import numpy as np
-
 from common import bcolors, EPSILON
+
+
+def score_regression(y_true: np.ndarray = None, y_preds: np.ndarray = None):
+    return {metric.__name__: metric().score(y_true, y_preds) for metric in RegressionMetric.__subclasses__()}
 
 
 class Metric(metaclass=abc.ABCMeta):
@@ -29,15 +32,14 @@ class MeanSquaredError(RegressionMetric):
         return np.mean(np.power(y_true - y_pred, 2))
 
 
+class RootMeanSquaredError(RegressionMetric):
+    def score(self, y_true: np.ndarray, y_pred: np.ndarray):
+        return np.sqrt(np.mean(np.power(y_true - y_pred, 2)))
+
+
 class MeanAbsoluteError(RegressionMetric):
     def score(self, y_true: np.ndarray, y_pred: np.ndarray):
         return np.mean(np.abs(y_true - y_pred))
-
-
-class MeanAbsolutePercentageError(RegressionMetric):
-    def score(self, y_true: np.ndarray, y_pred: np.ndarray):
-        y_true[y_true == 0] = EPSILON
-        return np.mean(np.abs((y_true - y_pred)) / y_true) * 100
 
 
 class FitPercent(RegressionMetric):
@@ -45,7 +47,7 @@ class FitPercent(RegressionMetric):
         # also called Normalized Root Mean Squared Error (NRMSE): referring to
         # https://www.mathworks.com/help/ident/ug/model-quality-metrics.html
 
-        return 100 * (1 - (np.linalg.norm(y_true - y_pred)) / np.linalg.norm(y_true - np.mean(y_true)))
+        return 100 * (1 - np.linalg.norm(y_true - y_pred) / np.linalg.norm(y_true - np.mean(y_true)))
 
 
 class CosineSimilarity(RegressionMetric):
