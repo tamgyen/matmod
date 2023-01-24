@@ -4,6 +4,10 @@ from common import bcolors, EPSILON
 
 
 def score_regression(y_true: np.ndarray = None, y_preds: np.ndarray = None):
+    assert y_true.size == y_preds.size, f'{bcolors.FAIL}Size mismatch in y_true and y_pred\n'
+    y_preds = np.squeeze(y_preds)
+    y_true = np.squeeze(y_true)
+
     return {metric.__name__: metric().score(y_true, y_preds) for metric in RegressionMetric.__subclasses__()}
 
 

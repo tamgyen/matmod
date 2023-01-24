@@ -1,12 +1,18 @@
-import abc
+import pygam
+
+from metrics import *
+from common import *
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from time import perf_counter
 import statsmodels.api as sm
 from statsmodels.gam.api import GLMGam, BSplines
+import statsmodels.formula.api as smf
 
 import tensorflow as tf
-from keras.layers import Dense, Input
+from keras.layers import Dense, Input, Dropout
 
 
 class Model(metaclass=abc.ABCMeta):
@@ -30,6 +36,13 @@ class Model(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None) -> np.ndarray:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None):
         raise NotImplementedError
 
 
@@ -60,6 +73,30 @@ class NaiveRegressor(RegressorModel):
         self.infer_time = t_stop - t_start
         return preds
 
+    def test(self):
+        pass
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       denorm: tuple = None,
+                       verbose: bool = True):
+
+        self.train(training_data, features, targets)
+        preds = self.predict(testing_data)
+
+        preds_denorm = denormalize(preds, *denorm)
+
+        y_trues = testing_data[targets].values
+        y_trues_denorm = denormalize(y_trues, *denorm)
+
+        results = score_regression(y_trues_denorm, preds_denorm)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.2f}') for k, v in results.items()]
+        return results
+
 
 class LinearRegressor(RegressorModel):
     def train(self, training_data: pd.DataFrame = None,
@@ -70,6 +107,27 @@ class LinearRegressor(RegressorModel):
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None) -> np.ndarray:
         return self.model.predict(data).values
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       denorm: tuple = None,
+                       verbose: bool = True):
+
+        self.train(training_data, features, targets)
+        preds = self.predict(testing_data)
+
+        preds_denorm = denormalize(preds, *denorm)
+
+        y_trues = testing_data[targets].values
+        y_trues_denorm = denormalize(y_trues, *denorm)
+
+        results = score_regression(y_trues_denorm, preds_denorm)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.2f}') for k, v in results.items()]
+        return results
 
 
 class LassoRegressor(RegressorModel):
@@ -83,20 +141,61 @@ class LassoRegressor(RegressorModel):
                 features: list[str] = None) -> np.ndarray:
         return self.model.predict(data).values
 
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       denorm: tuple = None,
+                       verbose: bool = True):
+
+        self.train(training_data, features, targets)
+        preds = self.predict(testing_data)
+
+        preds_denorm = denormalize(preds, *denorm)
+
+        y_trues = testing_data[targets].values
+        y_trues_denorm = denormalize(y_trues, *denorm)
+
+        results = score_regression(y_trues_denorm, preds_denorm)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.2f}') for k, v in results.items()]
+        return results
+
 
 class GAM(RegressorModel):
     def train(self, training_data: pd.DataFrame = None,
               features: list[str] = None,
               targets: list[str] = None):
         # TODO:
-        x_spline = training_data[features]
-        bs = BSplines(x_spline, df=[12, 10], degree=[3, 3])
-        self.model = GLMGam.from_formula(f'{targets[0]} ~ {" + ".join(features)}',
-                                         training_data, smoother=bs).fit()
+        s, f = pygam.s, pygam.f
+        X = training_data[features]
+        self.model = pygam.GAM(s(0) + s(1)).fit(X, training_data[targets])
 
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None) -> np.ndarray:
-        return self.model.predict(data).values
+        return self.model.predict(data[features])
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       denorm: tuple = None,
+                       verbose: bool = True):
+
+        self.train(training_data, features, targets)
+        preds = self.predict(testing_data, features)
+
+        preds_denorm = denormalize(preds, *denorm)
+
+        y_trues = testing_data[targets].values
+        y_trues_denorm = denormalize(y_trues, *denorm)
+
+        results = score_regression(y_trues_denorm, preds_denorm)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.2f}') for k, v in results.items()]
+        return results
 
 
 class RobustRegressor(RegressorModel):
@@ -112,16 +211,23 @@ class RobustRegressor(RegressorModel):
         return self.model.predict(data).values
 
 
+class PolynomialRegressor(RegressorModel):
+    def train(self, training_data: pd.DataFrame = None,
+              features: list[str] = None,
+              targets: list[str] = None):
+
+        poly = np.polyfit()
+
 class NNRegressor(RegressorModel):
     def train(self, training_data: pd.DataFrame = None,
               features: list[str] = None,
               targets: list[str] = None):
         # normalize
         df_norm = training_data[features + targets].copy()
-        # df_norm = df_norm.apply(lambda x: (x - x.mean()) / x.std(), axis=0)
+        df_norm = df_norm.apply(lambda x: (x - x.mean()) / x.std(), axis=0)
 
         # split
-        split = .8
+        split = .8  # .7
         split_id = round(split * len(training_data))
         df_norm = df_norm.sample(frac=1, random_state=333).reset_index(drop=True)
         df_train = df_norm[:split_id]
@@ -136,13 +242,14 @@ class NNRegressor(RegressorModel):
 
         # modeling
         inp = Input(shape=(x_train.shape[-1]))
-        x = Dense(4, activation='relu')(inp)
-        x = Dense(2, activation='relu')(x)
+        x = Dense(20, activation='relu')(inp)
+        x = Dropout(.25)(x)
+        x = Dense(5, activation='relu')(x)
         out = Dense(1, activation='sigmoid')(x)
 
         self.model = tf.keras.models.Model(inputs=inp, outputs=out)
         self.model.compile(optimizer='adam',
-                           loss=tf.keras.losses.Huber(),
+                           loss=tf.keras.losses.MeanSquaredError(),
                            metrics=[tf.keras.metrics.MeanAbsolutePercentageError(),
                                     tf.keras.metrics.MeanAbsoluteError()])
 
@@ -150,8 +257,11 @@ class NNRegressor(RegressorModel):
         hist = self.model.fit(x=x_train,
                               y=y_train,
                               validation_data=(x_eval, y_eval),
-                              epochs=100,
+                              epochs=500,
                               batch_size=1000)
+
+        plt.plot(hist.history)
+        plt.show()
 
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None) -> np.ndarray:
@@ -159,7 +269,6 @@ class NNRegressor(RegressorModel):
 
 
 # ********************** CLS ************************
-
 
 class NaiveClassifier(ClassifierModel):
     def train(self, training_data: pd.DataFrame = None,
