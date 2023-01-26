@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pickle
 
 
 class bcolors:
@@ -16,9 +17,10 @@ class bcolors:
 
 EPSILON = 1e-7
 
+
 def split_data(df: pd.DataFrame, split: float):
     split_id = round(split * len(df))
-    df_samp = df.sample(frac=1, random_state=333).reset_index(drop=True)
+    df_samp = df.sample(frac=1, random_state=123).reset_index(drop=True)
     df_train = df_samp[:split_id]
     df_test = df_samp[split_id:].reset_index(drop=True)
 

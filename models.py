@@ -1,4 +1,7 @@
+import os
+
 import pygam
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 from metrics import *
 from common import *
@@ -8,11 +11,9 @@ import numpy as np
 import pandas as pd
 from time import perf_counter
 import statsmodels.api as sm
-from statsmodels.gam.api import GLMGam, BSplines
-import statsmodels.formula.api as smf
 
 import tensorflow as tf
-from keras.layers import Dense, Input, Dropout
+from keras.layers import *
 
 
 class Model(metaclass=abc.ABCMeta):
@@ -170,7 +171,7 @@ class GAM(RegressorModel):
         # TODO:
         s, f = pygam.s, pygam.f
         X = training_data[features]
-        self.model = pygam.GAM(s(0) + s(1)).fit(X, training_data[targets])
+        self.model = pygam.GAM(s(0) + s(1) + f(2)).fit(X, training_data[targets])
 
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None) -> np.ndarray:
@@ -218,54 +219,91 @@ class PolynomialRegressor(RegressorModel):
 
         poly = np.polyfit()
 
+
 class NNRegressor(RegressorModel):
+    @staticmethod
+    def denormalized_mae(y_true, y_preds):
+        return tf.abs(y_true-y_preds) * 251.01737952758302 + 92.8677986740517
+
+    def build(self, input_shape, dense_width, dense_depth, dropout, optimizer):
+        inp = Input(shape=(input_shape))
+        pass
+
     def train(self, training_data: pd.DataFrame = None,
               features: list[str] = None,
-              targets: list[str] = None):
-        # normalize
-        df_norm = training_data[features + targets].copy()
-        df_norm = df_norm.apply(lambda x: (x - x.mean()) / x.std(), axis=0)
-
-        # split
-        split = .8  # .7
-        split_id = round(split * len(training_data))
-        df_norm = df_norm.sample(frac=1, random_state=333).reset_index(drop=True)
-        df_train = df_norm[:split_id]
-        df_test = df_norm[split_id:].reset_index(drop=True)
-
+              targets: list[str] = None,
+              ):
         # convert dfs to ndarrays
-        x_train = df_train[features].values.astype('float32')
-        y_train = df_train[targets].values.astype('float32')
+        x_train = training_data[features].iloc[int(len(training_data)*.2):].values.astype('float32')
+        y_train = training_data[targets].iloc[int(len(training_data)*.2):].values.astype('float32')
 
-        x_eval = df_test[features].values.astype('float32')
-        y_eval = df_test[targets].values.astype('float32')
+        x_eval = training_data[features].iloc[:int(len(training_data)*.2)].values.astype('float32')
+        y_eval = training_data[targets].iloc[:int(len(training_data)*.2)].values.astype('float32')
+
+        print(f'train samples: {x_train.shape[0]}\ntest samples: {x_eval.shape[0]}')
 
         # modeling
         inp = Input(shape=(x_train.shape[-1]))
-        x = Dense(20, activation='relu')(inp)
-        x = Dropout(.25)(x)
-        x = Dense(5, activation='relu')(x)
-        out = Dense(1, activation='sigmoid')(x)
+        x = Dense(128, activation='relu')(inp)
+        x = Dropout(.5)(x)
+        x = Dense(64, activation='relu')(x)
+        x = Dropout(.4)(x)
+        x = Dense(8, activation='relu')(x)
+        out = Dense(1, activation='linear')(x)
 
         self.model = tf.keras.models.Model(inputs=inp, outputs=out)
-        self.model.compile(optimizer='adam',
-                           loss=tf.keras.losses.MeanSquaredError(),
-                           metrics=[tf.keras.metrics.MeanAbsolutePercentageError(),
-                                    tf.keras.metrics.MeanAbsoluteError()])
+        self.model.compile(optimizer='Adam',
+                           loss=tf.keras.losses.Huber(),
+                           metrics=[self.denormalized_mae])
 
-        # fit
+        print(self.model.summary())
+
+        os.makedirs('./tmp', exist_ok=True)
+
+        checkpoint = ModelCheckpoint(f'./tmp/NN_weights_best.h5',
+                                     monitor='val_loss', verbose=1,
+                                     save_best_only=True, mode='min')
+        es = EarlyStopping(monitor='val_loss', patience=50)
+
         hist = self.model.fit(x=x_train,
                               y=y_train,
                               validation_data=(x_eval, y_eval),
                               epochs=500,
-                              batch_size=1000)
+                              batch_size=1000,
+                              callbacks=[checkpoint, es])
 
-        plt.plot(hist.history)
+        self.model.load_weights('./tmp/NN_weights_best.h5')
+
+        plt.plot(hist.history['loss'])
+        plt.plot(hist.history['val_loss'])
         plt.show()
 
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None) -> np.ndarray:
-        pass
+        return self.model.predict(data[features].values)
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       denorm: tuple = None,
+                       verbose: bool = True):
+
+        self.denorm = denorm
+
+        self.train(training_data, features, targets)
+        preds = self.predict(testing_data, features)
+
+        preds_denorm = denormalize(preds, *denorm)
+
+        y_trues = testing_data[targets].values.astype('float32')
+        y_trues_denorm = denormalize(y_trues, *denorm)
+
+        results = score_regression(y_trues_denorm, preds_denorm)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.2f}') for k, v in results.items()]
+        return results
 
 
 # ********************** CLS ************************
