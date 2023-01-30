@@ -1,5 +1,12 @@
 import abc
 import numpy as np
+import pandas as pd
+import seaborn as sns
+
+from matplotlib import pyplot as plt
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+
 from common import bcolors, EPSILON
 
 
@@ -8,7 +15,27 @@ def score_regression(y_true: np.ndarray = None, y_preds: np.ndarray = None):
     y_preds = np.squeeze(y_preds)
     y_true = np.squeeze(y_true)
 
-    return {metric.__name__: metric().score(y_true, y_preds) for metric in RegressionMetric.__subclasses__()}
+    return {metric.__name__: round(metric().score(y_true, y_preds), 8) for metric in RegressionMetric.__subclasses__()}
+
+
+def score_classification(y_true: np.ndarray = None, y_preds: np.ndarray = None):
+    assert y_true.size == y_preds.size, f'{bcolors.FAIL}Size mismatch in y_true and y_pred\n'
+    y_preds = np.squeeze(y_preds)
+    y_true = np.squeeze(y_true)
+
+    report = classification_report(y_true, y_preds, output_dict=True)
+
+    return {'Accuracy': round(report['accuracy'], 8), 'F1Score': round(report['weighted avg']['f1-score'], 8)}
+
+
+def plot_confusion_mtarix(y_true: np.ndarray = None, y_preds: np.ndarray = None):
+    cm = confusion_matrix(y_true, y_preds)
+    plt.figure(figsize=(5, 5))
+    sns.heatmap(cm, annot=True, fmt="d")
+    plt.title('Confusion matrix')
+    plt.ylabel('Actual label')
+    plt.xlabel('Predicted label')
+    plt.show()
 
 
 class Metric(metaclass=abc.ABCMeta):
@@ -46,6 +73,12 @@ class MeanAbsoluteError(RegressionMetric):
         return np.mean(np.abs(y_true - y_pred))
 
 
+class R2(RegressionMetric):
+    def score(self, y_true: np.ndarray, y_pred: np.ndarray):
+        a = sum(np.square(y_true - y_pred))
+        b = sum(np.square(y_true - np.mean(y_true)))
+        return 1 - (a / b)
+
 class FitPercent(RegressionMetric):
     def score(self, y_true: np.ndarray, y_pred: np.ndarray):
         # also called Normalized Root Mean Squared Error (NRMSE): referring to
@@ -67,12 +100,10 @@ class KLDivergence(ClassificationMetric):
         return y_true * np.log(y_true / y_pred)
 
 
-class Accuracy(ClassificationMetric):
-    def score(self, y_true: np.ndarray, y_pred: np.ndarray):
-        differing_labels = np.count_nonzero(y_true - y_pred, axis=1)
-        score = differing_labels == 0
-        print(score)
+# class Accuracy(ClassificationMetric):
+#     def score(self, y_true: np.ndarray, y_pred: np.ndarray):
+#         scores = sklearn.metrics.classification_report(y_true, y_pred, output_dict=True)
+#         return scores['accuracy']
 
-
-class F1Score(Metric):
-    pass
+# class F1Score(Metric):
+#     pass
