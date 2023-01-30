@@ -25,6 +25,8 @@ def score_classification(y_true: np.ndarray = None, y_preds: np.ndarray = None):
 
     report = classification_report(y_true, y_preds, output_dict=True)
 
+
+
     return {'Accuracy': round(report['accuracy'], 8), 'F1Score': round(report['weighted avg']['f1-score'], 8)}
 
 

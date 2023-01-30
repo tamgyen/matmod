@@ -15,6 +15,15 @@ import statsmodels.api as sm
 import tensorflow as tf
 from keras.layers import *
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+
+from common import split_data, normalize
+from metrics import score_classification, plot_confusion_mtarix
+from sklearn.svm import LinearSVC, SVC
+
+import xgboost as xgb
+
 
 class Model(metaclass=abc.ABCMeta):
     @classmethod
@@ -164,7 +173,6 @@ class RegularizedRegressor(RegressorModel):
                        denorm: tuple = None,
                        verbose: bool = True,
                        **kwargs):
-
         self.train(training_data, features, targets, **kwargs)
         preds = self.predict(testing_data)
 
@@ -188,7 +196,8 @@ class GAM(RegressorModel):
         X = training_data[features]
         self.model = pygam.GAM(verbose=True, **kwargs)
         print(f'{bcolors.OKGREEN}GAM grid search..')
-        self.model.gridsearch(training_data[features].values, training_data[targets].values, keep_best=True, progress=True)
+        self.model.gridsearch(training_data[features].values, training_data[targets].values, keep_best=True,
+                              progress=True)
         self.model.fit(training_data[features].values, training_data[targets].values)
 
     def predict(self, data: pd.DataFrame = None,
@@ -276,7 +285,7 @@ class NNRegressor(RegressorModel):
         x = Dropout(dropout)(x)
         x = BatchNormalization()(x)
         for _ in range(dense_depth):
-            x = Dense(round(dense_width*dense_shrink), activation='swish')(x)
+            x = Dense(round(dense_width * dense_shrink), activation='swish')(x)
             x = Dropout(dropout)(x)
             x = BatchNormalization()(x)
         out = Dense(1, activation='linear')(x)
@@ -370,22 +379,216 @@ class NaiveClassifier(ClassifierModel):
 
     def predict(self, data: pd.DataFrame = None,
                 features: list[str] = None,
-              **kwargs) -> np.ndarray:
+                **kwargs) -> np.ndarray:
         return np.random.randint(low=0, high=self.num_classes, size=(len(data),))
 
     def train_and_test(self, training_data: pd.DataFrame = None,
                        testing_data: pd.DataFrame = None,
                        features: list[str] = None,
                        targets: list[str] = None,
-              **kwargs):
+                       verbose: bool = True,
+                       **kwargs):
+
         preds = self.predict(testing_data, features)
-        return score_classification(testing_data[targets].values, preds)
+
+        results = score_classification(testing_data[targets].values, preds)
+
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(testing_data[targets].values, preds)
+
+        return results
+
+
+class DecisionTree(ClassifierModel):
+    def train(self, training_data: pd.DataFrame = None,
+              features: list[str] = None,
+              targets: list[str] = None,
+              **kwargs):
+        self.model = DecisionTreeClassifier(random_state=123, **kwargs).fit(training_data[features].values,
+                                                                            training_data[targets].values)
+
+    def predict(self, data: pd.DataFrame = None,
+                features: list[str] = None,
+                **kwargs) -> np.ndarray:
+        return self.model.predict(data[features].values)
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       verbose: bool = True,
+                       **kwargs):
+
+        self.train(training_data, features, targets, **kwargs)
+        preds = self.predict(testing_data, features)
+        results = score_classification(testing_data[targets].values, preds)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(testing_data[targets].values, preds)
+
+        return results
+
+
+class RandomForest(ClassifierModel):
+    def train(self, training_data: pd.DataFrame = None,
+              features: list[str] = None,
+              targets: list[str] = None,
+              **kwargs):
+        self.model = RandomForestClassifier(random_state=123, **kwargs)
+        self.model.fit(training_data[features].values, training_data[targets].values)
+
+    def predict(self, data: pd.DataFrame = None,
+                features: list[str] = None,
+                **kwargs) -> np.ndarray:
+        return self.model.predict(data[features].values)
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       verbose: bool = True,
+                       **kwargs):
+        self.train(training_data, features, targets, **kwargs)
+
+        preds = self.predict(testing_data, features)
+
+        results = score_classification(testing_data[targets].values, preds)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(testing_data[targets].values, preds)
+
+        return results
+
+
+class LSVC(ClassifierModel):
+    def train(self, training_data: pd.DataFrame = None,
+              features: list[str] = None,
+              targets: list[str] = None,
+              **kwargs):
+        self.model = LinearSVC(random_state=123, **kwargs)
+        self.model.fit(training_data[features].values, training_data[targets].values)
+
+    def predict(self, data: pd.DataFrame = None,
+                features: list[str] = None,
+                **kwargs) -> np.ndarray:
+        return self.model.predict(data[features].values)
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       verbose: bool = True,
+                       **kwargs):
+        self.train(training_data, features, targets, **kwargs)
+
+        preds = self.predict(testing_data, features)
+
+        results = score_classification(testing_data[targets].values, preds)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(testing_data[targets].values, preds)
+
+        return results
+
+
+class SVClassifier(ClassifierModel):
+    def train(self, training_data: pd.DataFrame = None,
+              features: list[str] = None,
+              targets: list[str] = None,
+              **kwargs):
+        self.model = SVC(random_state=123, **kwargs)
+        self.model.fit(training_data[features].values, training_data[targets].values)
+
+    def predict(self, data: pd.DataFrame = None,
+                features: list[str] = None,
+                **kwargs) -> np.ndarray:
+        return self.model.predict(data[features].values)
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       verbose: bool = True,
+                       **kwargs):
+        self.train(training_data, features, targets, **kwargs)
+
+        preds = self.predict(testing_data, features)
+
+        results = score_classification(testing_data[targets].values, preds)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(testing_data[targets].values, preds)
+
+        return results
+
+
+class Boosting(ClassifierModel):
+    def train(self, training_data: pd.DataFrame = None,
+              features: list[str] = None,
+              targets: list[str] = None,
+              **kwargs):
+        self.model = xgb.XGBClassifier(**kwargs)
+        self.model.fit(training_data[features].values, training_data[targets].values)
+
+    def predict(self, data: pd.DataFrame = None,
+                features: list[str] = None,
+                **kwargs) -> np.ndarray:
+        return self.model.predict(data[features].values)
+
+    def train_and_test(self, training_data: pd.DataFrame = None,
+                       testing_data: pd.DataFrame = None,
+                       features: list[str] = None,
+                       targets: list[str] = None,
+                       verbose: bool = True,
+                       **kwargs):
+        self.train(training_data, features, targets, **kwargs)
+
+        preds = self.predict(testing_data, features)
+
+        results = score_classification(testing_data[targets].values, preds)
+        if verbose:
+            print(f'\n{self.__class__.__name__}:')
+            [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(testing_data[targets].values, preds)
+
+        return results
 
 
 class NNClassifier(ClassifierModel):
-    def build(self, input_shape, dense_width, dense_depth, dropout, optimizer):
+    def build(self, input_shape, dense_width, dense_depth, dense_shrink, dropout):
         inp = Input(shape=(input_shape))
-        pass
+        x = Dense(dense_width, activation='swish')(inp)
+        x = Dropout(dropout)(x)
+        x = BatchNormalization()(x)
+        for _ in range(dense_depth):
+            x = Dense(round(dense_width * dense_shrink), activation='swish')(x)
+            x = Dropout(dropout)(x)
+            x = BatchNormalization()(x)
+        out = Dense(self.num_classes, activation='linear')(x)
+
+        if self.num_classes == 2:
+            loss = tf.keras.losses.BinaryFocalCrossentropy(from_logits=True, label_smoothing=.15)
+        else:
+            loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+
+        self.model = tf.keras.models.Model(inputs=inp, outputs=out)
+        self.model.compile(optimizer=tf.keras.optimizers.Adam(),
+                           loss=loss,
+                           metrics='Accuracy')
+
+        print(self.model.summary())
 
     def train(self, training_data: pd.DataFrame = None,
               testing_data: pd.DataFrame = None,
@@ -403,29 +606,7 @@ class NNClassifier(ClassifierModel):
 
         print(f'train samples: {x_train.shape[0]}\ntest samples: {x_eval.shape[0]}')
 
-        # modeling
-        inp = Input(shape=(x_train.shape[-1]))
-        x = Dense(40, activation='swish')(inp)
-        x = Dropout(.4)(x)
-        x = BatchNormalization()(x)
-        x = Dense(20, activation='swish')(x)
-        x = Dropout(.3)(x)
-        x = BatchNormalization()(x)
-        x = Dense(10, activation='swish')(x)
-        x = Dropout(.3)(x)
-        out = Dense(self.num_classes, activation='linear')(x)
-
-        if self.num_classes == 2:
-            loss = tf.keras.losses.BinaryFocalCrossentropy(from_logits=True, label_smoothing=.15)
-        else:
-            loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
-
-        self.model = tf.keras.models.Model(inputs=inp, outputs=out)
-        self.model.compile(optimizer=tf.keras.optimizers.Adam(),
-                           loss=loss,
-                           metrics='Accuracy')
-
-        print(self.model.summary())
+        self.build(input_shape=x_train.shape[-1], **kwargs)
 
         os.makedirs('./tmp', exist_ok=True)
 
@@ -462,7 +643,6 @@ class NNClassifier(ClassifierModel):
                        testing_data: pd.DataFrame = None,
                        features: list[str] = None,
                        targets: list[str] = None,
-                       denorm: tuple = None,
                        verbose: bool = True,
                        **kwargs):
 
@@ -473,8 +653,10 @@ class NNClassifier(ClassifierModel):
         np.save('trues.npy', y_trues)
 
         results = score_classification(y_trues, y_preds)
-        plot_confusion_mtarix(y_trues, y_preds)
         if verbose:
             print(f'\n{self.__class__.__name__}:')
             [print(f'{k}: {v:.6f}') for k, v in results.items()]
+
+            plot_confusion_mtarix(y_trues, y_preds)
+
         return results
