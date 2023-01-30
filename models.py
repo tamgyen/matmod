@@ -270,9 +270,23 @@ class NNRegressor(RegressorModel):
     def denormalized_mae(y_true, y_preds):
         return tf.abs(y_true - y_preds) * 251.01737952758302 + 92.8677986740517
 
-    def build(self, input_shape, dense_width, dense_depth, dropout, optimizer):
+    def build(self, input_shape, dense_width, dense_depth, dense_shrink, dropout):
         inp = Input(shape=(input_shape))
-        pass
+        x = Dense(dense_width, activation='swish')(inp)
+        x = Dropout(dropout)(x)
+        x = BatchNormalization()(x)
+        for _ in range(dense_depth):
+            x = Dense(round(dense_width*dense_shrink), activation='swish')(x)
+            x = Dropout(dropout)(x)
+            x = BatchNormalization()(x)
+        out = Dense(1, activation='linear')(x)
+
+        self.model = tf.keras.models.Model(inputs=inp, outputs=out)
+        self.model.compile(optimizer='Adam',
+                           loss=tf.keras.losses.Huber(),
+                           metrics=tf.keras.metrics.RootMeanSquaredError())
+
+        print(self.model.summary())
 
     def train(self, training_data: pd.DataFrame = None,
               features: list[str] = None,
@@ -288,22 +302,7 @@ class NNRegressor(RegressorModel):
         print(f'train samples: {x_train.shape[0]}\ntest samples: {x_eval.shape[0]}')
 
         # modeling
-        inp = Input(shape=(x_train.shape[-1]))
-        x = Dense(20, activation='swish')(inp)
-        x = Dropout(.4)(x)
-        x = BatchNormalization()(x)
-        x = Dense(10, activation='swish')(x)
-        x = Dropout(.4)(x)
-        x = BatchNormalization()(x)
-        x = Dense(5, activation='swish')(x)
-        out = Dense(1, activation='linear')(x)
-
-        self.model = tf.keras.models.Model(inputs=inp, outputs=out)
-        self.model.compile(optimizer='Adam',
-                           loss=tf.keras.losses.Huber(),
-                           metrics=tf.keras.metrics.RootMeanSquaredError())
-
-        print(self.model.summary())
+        self.build(x_train.shape[-1], **kwargs)
 
         os.makedirs('./tmp', exist_ok=True)
 
