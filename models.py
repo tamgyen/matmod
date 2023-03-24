@@ -1,27 +1,18 @@
 import os
-
 import pygam
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-
 from metrics import *
 from common import *
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from time import perf_counter
 import statsmodels.api as sm
-
 import tensorflow as tf
 from keras.layers import *
-
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier, plot_tree
-
-from common import split_data, normalize
-from metrics import score_classification, plot_confusion_mtarix
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import LinearSVC, SVC
-
 import xgboost as xgb
 
 
@@ -316,7 +307,7 @@ class NNRegressor(RegressorModel):
         os.makedirs('./tmp', exist_ok=True)
 
         checkpoint = ModelCheckpoint(f'./tmp/NN_weights_best.h5',
-                                     monitor='val_loss', verbose=1,
+                                     monitor='val_loss', verbose=0,
                                      save_best_only=True, mode='min')
         es = EarlyStopping(monitor='val_loss', patience=150)
 
@@ -325,7 +316,8 @@ class NNRegressor(RegressorModel):
                               validation_data=(x_eval, y_eval),
                               epochs=1000,
                               batch_size=1000,
-                              callbacks=[checkpoint, es])
+                              callbacks=[checkpoint, es],
+                              verbose=False)
 
         self.model.load_weights('./tmp/NN_weights_best.h5')
 
@@ -611,7 +603,7 @@ class NNClassifier(ClassifierModel):
         os.makedirs('./tmp', exist_ok=True)
 
         checkpoint = ModelCheckpoint(f'./tmp/NN_class_weights_best.h5',
-                                     monitor='val_Accuracy', verbose=1,
+                                     monitor='val_Accuracy', verbose=0,
                                      save_best_only=True, mode='max')
         es = EarlyStopping(monitor='val_Accuracy', patience=200, mode='max')
 
@@ -621,7 +613,8 @@ class NNClassifier(ClassifierModel):
                               epochs=1000,
                               batch_size=1600,
                               callbacks=[checkpoint, es],
-                              # class_weight=class_weights
+                              # class_weight=class_weights,
+                              verbose=False
                               )
 
         self.model.load_weights('./tmp/NN_class_weights_best.h5')

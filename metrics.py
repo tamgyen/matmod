@@ -1,6 +1,5 @@
 import abc
 import numpy as np
-import pandas as pd
 import seaborn as sns
 
 from matplotlib import pyplot as plt
@@ -24,8 +23,6 @@ def score_classification(y_true: np.ndarray = None, y_preds: np.ndarray = None):
     y_true = np.squeeze(y_true)
 
     report = classification_report(y_true, y_preds, output_dict=True)
-
-
 
     return {'Accuracy': round(report['accuracy'], 8), 'F1Score': round(report['weighted avg']['f1-score'], 8)}
 
@@ -81,6 +78,7 @@ class R2(RegressionMetric):
         b = sum(np.square(y_true - np.mean(y_true)))
         return 1 - (a / b)
 
+
 class FitPercent(RegressionMetric):
     def score(self, y_true: np.ndarray, y_pred: np.ndarray):
         # also called Normalized Root Mean Squared Error (NRMSE): referring to
@@ -100,7 +98,6 @@ class CosineSimilarity(RegressionMetric):
 class KLDivergence(ClassificationMetric):
     def score(self, y_true: np.ndarray, y_pred: np.ndarray):
         return y_true * np.log(y_true / y_pred)
-
 
 # class Accuracy(ClassificationMetric):
 #     def score(self, y_true: np.ndarray, y_pred: np.ndarray):
